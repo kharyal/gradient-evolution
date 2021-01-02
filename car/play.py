@@ -15,6 +15,7 @@ def play(weights,shape, env,ep_max_step=1000):
         params = params_reshape(weights,shape)
         reward = 0.
         for i in range(ep_max_step):
+            # print(i)
             env.render()
             s = np.concatenate((s['observation'], s['desired_goal']))
             a = get_action(params,s,shape).T
