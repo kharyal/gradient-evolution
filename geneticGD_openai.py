@@ -14,7 +14,7 @@ def choose_eta(size):
 	eta[basis_ind, np.arange(size[1])] = 1
 	return eta
 
-def get_reward(weights,env,shape,ep_max_step=200):
+def get_reward(weights,env,shape,ep_max_step=700):
 	s = env.reset()
 	# print(weights.shape)
 	params = params_reshape(weights,shape)
@@ -100,6 +100,7 @@ def train(weights, shape, env, pool):
 		weights = np.hstack((weights,new_weights))
 		# print(weights.shape)
 		# exit()
+		print(err)
 		print("Iter: ", i , err[0,0])
 	
 	play(weights[:,0], env, ep_max_step = 10000000)
@@ -107,10 +108,10 @@ def train(weights, shape, env, pool):
 
 if __name__ == "__main__":
 	pool = mp.Pool(processes = num_processes)
-	env = gym.make('MountainCar-v0')
-	num_features = 2
-	num_actions = 3
-	ep_max_step = 200
+	env = gym.make('CartPole-v0')
+	num_features = 4
+	num_actions = 2
+	ep_max_step = 700
 	weights = np.array([build_net(num_features,num_actions)[1] for j in range(gen_size)]).T
 	shape,_ = build_net(num_features,num_actions)
 	# play(weights[:,0],env,ep_max_step = 10000)
