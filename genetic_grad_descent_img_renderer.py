@@ -5,7 +5,7 @@ from tqdm import tqdm
 import time
 from copy import deepcopy
 
-im_sz = (32,32)
+im_sz = (128,128)
 im1 = cv2.resize(cv2.imread("1.jpg",0), im_sz)[:,:,None]/255
 im1 = np.reshape(im1, (im_sz[0]*im_sz[1],1))
 
@@ -26,7 +26,6 @@ def genetic_grad(im1, size_generation=30, size_eta=15, iterations=10000, lr = 0.
     # grad_pred = 0
     with tqdm(iter(range(iterations))) as titer:
         for i in titer:
-
             pix_err = (gen_img-im1)
             err = np.sum((pix_err)**2, axis=0)
             err = np.array(sorted(zip(err, np.arange(sz))))
@@ -42,7 +41,11 @@ def genetic_grad(im1, size_generation=30, size_eta=15, iterations=10000, lr = 0.
                 b = (err_eta - err[j,0])/t
                 grad,_,_,_ = np.linalg.lstsq(eta.T, b)
                 grad = grad[:,None]
+                # grad = np.random.normal(0,0.5, gen_img[:,j][:,None].shape)
                 gen_img = np.hstack((gen_img, (gen_img[:,j] - lr*grad.T).T))
+                # gen_img = np.hstack((gen_img, (gen_img[:,j] - grad.T).T))
+                # print(gen_img.shape)
+                # exit()
                 if j == 0:
                     grad_pred = grad
                     grad_actual = 2*(gen_img[:,j] - im1.T)
@@ -52,4 +55,6 @@ def genetic_grad(im1, size_generation=30, size_eta=15, iterations=10000, lr = 0.
             # titer.set_postfix(ERROR = err[0,0])
             cv2.imshow('reconstruction', np.reshape(gen_img[:,0], (im_sz[0], im_sz[1])))
             cv2.waitKey(1)
+            if i%100==0:
+                cv2.imwrite(str(i)+"_ours.png", (255*np.reshape(gen_img[:,0], (im_sz[0], im_sz[1]))).astype(int))
 genetic_grad(im1)
