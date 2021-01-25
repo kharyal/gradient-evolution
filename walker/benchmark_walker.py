@@ -1,16 +1,14 @@
-import os
-os.environ['LANG']='en_US'
-
 import numpy as np
 import gym
 import time
 import multiprocessing as mp
+from deterministic_bipedal_walker import BipedalWalker
+from copy import deepcopy
 
-num_processes = 4
-gen_size = 10
-is_continuous = [False, 2]
-
-
+num_processes = 40
+gen_size = 20
+is_continuous = [True, 1]
+np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 def choose_eta(size):
     choices = np.arange(size[0])
@@ -20,9 +18,9 @@ def choose_eta(size):
     eta[basis_ind, np.arange(size[1])] = 1
     return eta
 
-def get_reward(weights,env,shape,ep_max_step=100):
+def get_reward(weights,env,shape,ep_max_step=500):
     rewards = []
-    N = 4
+    N = 1
     for i in range(N):
         s = env.reset()
         # print(s.shape)
@@ -33,10 +31,10 @@ def get_reward(weights,env,shape,ep_max_step=100):
         # ss = []
         for i in range(ep_max_step):
             # s = np.concatenate((s['observation'], s['desired_goal']))
-            s = s.reshape(128,1)
+            s = s.reshape(24,1)
             # print(s.shape)
             a = get_action(params,s,shape)
-            # a = a.reshape(2,1)
+            a = a.reshape(4,1)
             s,r,done, _ = env.step(a)
             reward += r
             # rt += r
@@ -76,7 +74,7 @@ def get_action(params,state,shape):
     x = np.tanh(x.dot(params[2]) + params[3])
     x = x.dot(params[4]) + params[5]
     if not is_continuous[0]:
-        return np.argmax(x, axis=1)[0] - 1
+        return np.argmax(x, axis=1)[0]
     else:
         return is_continuous[1]*np.tanh(x)
 
@@ -84,7 +82,7 @@ def mutate_random(parent_weights):
     return parent_weights + np.random.uniform(-1,1, parent_weights.shape)
 
 
-def mutate(parent_weights,prev_grad,parent_reward,env,shape,pool,num_eta = 30,t = 0.00001,lr = 0.1, gamma = 0):
+def mutate(parent_weights,prev_grad,parent_reward,env,shape,pool,num_eta = 30,t = 0.1,lr = 0.1, gamma = 0.3, random = True):
     eta = choose_eta((parent_weights.shape[0],num_eta))
     eta_weights = parent_weights[:,None] + t*eta
     jobs = [pool.apply_async(get_reward,(eta_weights[:,k], env, shape)) for k in range(num_eta)]
@@ -93,14 +91,14 @@ def mutate(parent_weights,prev_grad,parent_reward,env,shape,pool,num_eta = 30,t 
     b = b.reshape(max(b.shape),1)
     # print(eta.shape, b.shape)
     grad,_,_,_ = np.linalg.lstsq(eta.T,b)
-    grad = grad[:,None]; print(lr, np.linalg.norm(grad), end = " ")
-    if np.linalg.norm(grad)/grad.shape[0] < 0.1:
+    grad = grad[:,None]; print(lr, np.linalg.norm(grad.T + gamma* prev_grad), end = " ")
+    if np.linalg.norm(grad.T + gamma* prev_grad)/grad.shape[0] < 0.5 and random:
         print("random")
         grad = np.random.uniform(-10/lr,10/lr, grad.shape)
     else:
         print("")
     child_weights = parent_weights + lr*(grad.T + gamma* prev_grad)
-    return child_weights.reshape(parent_weights[:,None].shape), (grad.T + prev_grad).reshape(parent_weights[:,None].shape)
+    return deepcopy(child_weights.reshape(parent_weights[:,None].shape)), deepcopy((grad.T + gamma*prev_grad).reshape(parent_weights[:,None].shape))
 
 def play(weights,env,ep_max_step=1000):
     s = env.reset()
@@ -110,7 +108,7 @@ def play(weights,env,ep_max_step=1000):
     for i in range(ep_max_step):
         env.render()
         # s = np.concatenate((s['observation'], s['desired_goal']))
-        s = s.reshape(128,1)
+        s = s.reshape(24,1)
         a = get_action(params,s,shape)
         # a = a.reshape(4,1)
         s,r,done, _ = env.step(a)
@@ -126,10 +124,12 @@ def train(weights, shape, env, pool, max_iteration = 50):
     avg_top5 = 0
     num_eta = 6
     lr = 1
-    print(weights.shape)
+    # print(weights.shape)
     grads = np.zeros(weights.shape)
-    print(grads.shape)
+    # print(grads.shape)
     for i in range(max_iteration):
+        # if i>max_iteration//5:
+        #     # random = False
         num_eta = min(num_eta+i//2, 30)
         jobs = [pool.apply_async(get_reward,(weight.T,env,shape)) for weight in weights.T]
         rewards = np.array([j.get() for j in jobs])
@@ -140,12 +140,13 @@ def train(weights, shape, env, pool, max_iteration = 50):
         avg_top5 = np.mean(err[:5,0])
         # jobs = [pool.apply_async(mutate,(weights[:,j],err[j,0],env,shape,pool)) for j in range(weights.shape[1])]
         # new_weights = np.array([j.get() for j in jobs])
-        ret = [mutate(weights[:,j],grads[:,j],err[j,0],env,shape,pool, num_eta=num_eta, lr = lr) for j in range(gen_size//2)]
+        # ret = [mutate(weights[:,j],grads[:,j],err[j,0],env,shape,pool, num_eta=num_eta, lr = lr) for j in range(gen_size//2)]
         # new_weights = np.array(ret[:,1])
         
         for j in range(gen_size//2):
             ret = mutate(weights[:,j],grads[:,j],err[j,0],env,shape,pool, num_eta=num_eta, lr = lr)
-            weights = np.hstack((weights,ret[0]))
+            weights = np.hstack((weights,deepcopy(ret[0])))
+            grads[:,j] = deepcopy(ret[1].reshape(grads.shape[0],))
             grads = np.hstack((grads,np.zeros(ret[1].shape)))
 
         # new_weights= np.reshape(new_weights,(weights.shape[0],gen_size//2))
@@ -155,16 +156,18 @@ def train(weights, shape, env, pool, max_iteration = 50):
         
         # print(weights.shape)
         # exit()
-        #if abs(avg_top5 - prev_avg_top5)<0.5:
-        #    lr = min(lr*1.2, 2)
-        #else:
-        #    lr = 0.1
+        if abs(avg_top5 - prev_avg_top5)<0.5:
+           if lr == 0.1:
+               lr = 0.05
+           lr = min(lr*1.4, 0.1)
+        else:
+           lr = 0.05
         print(err)
         print("Iter: ", i , err[0,0])
         if i%10 == 0:
             np.savetxt(str(i)+".csv", weights[:,0])
     
-    play(weights[:,0], env, ep_max_step = 10000000)
+    #play(weights[:,0], env, ep_max_step = 10000000)
 
 def train_random(weights, shape, env, pool, max_iteration = 20):
     for i in range(max_iteration):
@@ -177,28 +180,26 @@ def train_random(weights, shape, env, pool, max_iteration = 20):
         new_weights = np.array([mutate_random(weights[:,j]) for j in range(weights.shape[1])])
         new_weights = np.reshape(new_weights,(weights.shape[0],gen_size//2))
         # print(new_weights.shape)
-        
+        weights = np.hstack((weights,new_weights))
         # print(weights.shape)
         # exit()
         print("Iter: ", i , err[0,0])
-        if i%10 == 0:
-            np.savetxt(str(i)+"random.csv", weights[:,0])
-        weights = np.hstack((weights,new_weights))
-    play(weights[:,0], env, ep_max_step = 10000000)
+        if(i % 20 == 0):
+            np.savetxt("random"+str(i)+".csv",weights[:,0])
+    # play(weights[:,0], env, ep_max_step = 10000000)
 
 if __name__ == "__main__":
     pool = mp.Pool(processes = num_processes)
-    env = gym.make("Boxing-ram-v0")
+    env = BipedalWalker()
     # print(env.reset())
-    num_features = 128
-    # print(env.action_space)
-    # exit()
-    num_actions = 18
+    np.random.seed(1003)
+    num_features = 24
+    num_actions = 4
     ep_max_step = 700
-    iterations = 11
+    iterations = 81
     weights = np.array([build_net(num_features,num_actions)[1] for j in range(gen_size)]).T
     shape,_ = build_net(num_features,num_actions)
     # play(weights[:,0],env,ep_max_step = 10000)
     print(shape,weights[:,0].shape)
-    # train(weights,shape,env,pool, iterations)
+    train(weights,shape,env,pool, iterations)
     train_random(weights, shape, env, pool, iterations)
