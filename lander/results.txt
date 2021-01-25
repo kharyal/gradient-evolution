@@ -1,3 +1,0 @@
-lander:
-- sir chalana: random: 120, Ours:30
-- hover: Random:230    Ours: 40
