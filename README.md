@@ -13,7 +13,7 @@ lander results after 80 iterations
 
 | Gradient evolution: | Normal ES: |
 | :---: | :---: |
-| <img src="gifs/lander_ours.gif" width="420" height="420" /> | <img src="gifs/lander_random.gif" width="420" height="420" /> |
+| <img src="gifs/lander_ours.gif" width="360" height="360" /> | <img src="gifs/lander_random.gif" width="360" height="360" /> |
 
 
 #### Bipedal Walker
@@ -22,7 +22,7 @@ walker results after 80 iterations
 
 | Gradient evolution: | Normal ES: |
 | :---: | :---: |
-| <img src="gifs/walker_ours.gif" width="420" height="420" /> | <img src="gifs/walker_random.gif" width="420" height="420" /> |
+| <img src="gifs/walker_ours.gif" width="360" height="360" /> | <img src="gifs/walker_random.gif" width="360" height="360" /> |
                                                  
 
 Benchmarking results on Restrigin function and Image Reconstruction are available in [algorithm.pdf](algorithm.pdf).
